@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/aura-hook.py UserPromptSubmit",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/aura-hook.mjs UserPromptSubmit",
             "timeout": 5
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/aura-hook.py PostToolUse",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/aura-hook.mjs PostToolUse",
             "timeout": 5
           }
         ]
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/aura-hook.py Stop",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/aura-hook.mjs Stop",
             "timeout": 5
           }
         ]
@@ -39,7 +39,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/aura-hook.py SessionStart",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/aura-hook.mjs SessionStart",
             "timeout": 5
           }
         ]
@@ -50,7 +50,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/aura-hook.py SessionEnd",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/aura-hook.mjs SessionEnd",
             "timeout": 5
           }
         ]

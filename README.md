@@ -46,14 +46,14 @@ git clone https://github.com/aura-metrics/aura-metrics-claude-code-plugin.git
 cp -r aura-metrics-claude-code-plugin/.claude /path/to/your/project/.claude
 ```
 
-2. That's it. No dependencies beyond Python 3.8+ (standard library only).
+2. That's it. No dependencies beyond Node.js (which Claude Code already requires).
 
 The directories `~/.aura/deliverables/` and `~/.aura/metrics/` are created automatically on first use.
 
 ## Viewing Metrics
 
 ```bash
-python3 .claude/hooks/aura-view.py
+node .claude/hooks/aura-view.mjs
 ```
 
 Displays active deliverables, recent completions, and aggregated stats with performance tier ratings:
@@ -66,7 +66,7 @@ Displays active deliverables, recent completions, and aggregated stats with perf
 | Recovery | <5% overhead | <10% | <20% | ≥20% |
 | Conformance | ≥0.95 | ≥0.85 | ≥0.70 | <0.70 |
 
-For machine-readable output: `python3 .claude/hooks/aura-view.py --json`
+For machine-readable output: `node .claude/hooks/aura-view.mjs --json`
 
 ## Data Storage
 
@@ -77,16 +77,16 @@ For machine-readable output: `python3 .claude/hooks/aura-view.py --json`
 
 | File | Purpose |
 |---|---|
-| `.claude/hooks/aura-hook.py` | Main hook handler (all events) |
-| `.claude/hooks/aura-view.py` | CLI metrics dashboard |
-| `.claude/hooks/test-aura.sh` | Integration test script |
+| `.claude/hooks/aura-hook.mjs` | Main hook handler (all events) |
+| `.claude/hooks/aura-view.mjs` | CLI metrics dashboard |
+| `.claude/hooks/test-aura.mjs` | Integration test script |
 | `.claude/hooks/AURA-README.md` | Hook-specific documentation |
 | `.claude/settings.json` | Hook wiring configuration |
 
 ## Running Tests
 
 ```bash
-bash .claude/hooks/test-aura.sh
+node .claude/hooks/test-aura.mjs
 ```
 
 Tests use isolated temp directories — no state is written to your real `~/.aura/`.

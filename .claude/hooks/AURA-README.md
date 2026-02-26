@@ -29,7 +29,7 @@ All tracking is invisible — hooks run in the background with `suppressOutput: 
 
 ## Installation
 
-The hooks are configured in `.claude/settings.json`. No additional setup is needed — the hook script uses only the Python standard library.
+The hooks are configured in `.claude/settings.json`. No additional setup is needed — the hook script uses only Node.js built-ins (which Claude Code already requires).
 
 Directories `~/.aura/deliverables/` and `~/.aura/metrics/` are created automatically on first use.
 
@@ -37,15 +37,15 @@ Directories `~/.aura/deliverables/` and `~/.aura/metrics/` are created automatic
 
 | File | Purpose |
 |---|---|
-| `.claude/hooks/aura-hook.py` | Main hook handler (all events) |
-| `.claude/hooks/aura-view.py` | CLI metrics dashboard |
-| `.claude/hooks/test-aura.sh` | Integration test script |
+| `.claude/hooks/aura-hook.mjs` | Main hook handler (all events) |
+| `.claude/hooks/aura-view.mjs` | CLI metrics dashboard |
+| `.claude/hooks/test-aura.mjs` | Integration test script |
 | `.claude/settings.json` | Hook wiring configuration |
 
 ## Viewing Metrics
 
 ```bash
-python3 .claude/hooks/aura-view.py
+node .claude/hooks/aura-view.mjs
 ```
 
 Shows active deliverables, recent completions, and aggregated stats with performance tier classifications (Elite/High/Medium/Low).
@@ -53,7 +53,7 @@ Shows active deliverables, recent completions, and aggregated stats with perform
 For JSON output:
 
 ```bash
-python3 .claude/hooks/aura-view.py --json
+node .claude/hooks/aura-view.mjs --json
 ```
 
 ## Data Storage
