@@ -2,7 +2,7 @@
 
 [![Tests](https://github.com/aura-metrics/aura-metrics-claude-code-plugin/actions/workflows/test.yml/badge.svg)](https://github.com/aura-metrics/aura-metrics-claude-code-plugin/actions/workflows/test.yml)
 
-Passive metrics collection for AI agent performance using [Claude Code hooks](https://docs.anthropic.com/en/docs/claude-code/hooks). AURA (Autonomous Unit Resolution Analytics) is like DORA metrics, but for AI agents instead of CI/CD pipelines.
+Passive metrics collection for AI agent performance using [Claude Code hooks](https://docs.anthropic.com/en/docs/claude-code/hooks). AURA is like DORA metrics, but for AI agents instead of CI/CD pipelines.
 
 ## What It Measures
 
