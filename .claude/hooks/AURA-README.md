@@ -26,6 +26,18 @@ Claude Code hooks fire automatically as you use spec-framework commands. Support
 /speckit.specify → /speckit.plan → /speckit.tasks → /speckit.implement → /speckit.checklist → /aura:archive
 ```
 
+**Universal** (works with any framework or standalone):
+```
+/aura:start <name>  →  Start tracking a new deliverable
+/aura:next          →  Advance to the next phase
+/aura:ff            →  Fast-forward to tasks phase
+/aura:apply         →  Jump to apply (tool calls counted)
+/aura:verify        →  Jump to verify
+/aura:done          →  Complete deliverable, emit metrics
+/aura:status        →  Print current deliverable state
+/aura:cancel        →  Abandon current deliverable
+```
+
 All tracking is invisible — hooks run in the background with `suppressOutput: true`.
 
 ## Installation

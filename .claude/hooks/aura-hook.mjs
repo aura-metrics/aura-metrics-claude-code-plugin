@@ -107,7 +107,7 @@ function findActiveDeliverable() {
   for (const f of files) {
     try {
       const state = JSON.parse(readFileSync(join(DELIVERABLES_DIR, f), "utf8"));
-      if (state.status !== "archive" && state.status !== "completed") return state;
+      if (state.status !== "archive" && state.status !== "completed" && state.status !== "cancelled") return state;
     } catch {
       continue;
     }
@@ -280,15 +280,38 @@ function outputSuppress() {
   process.stdout.write(JSON.stringify({ suppressOutput: true }) + "\n");
 }
 
+// ── Universal /aura: commands ────────────────────────────────────────────────
+
+const AURA_COMMANDS = {
+  "/aura:start": "propose",
+  "/aura:next": "advance",
+  "/aura:ff": "fast_forward",
+  "/aura:apply": "apply",
+  "/aura:verify": "verify",
+  "/aura:done": "archive",
+  "/aura:status": "status",
+  "/aura:cancel": "cancel",
+};
+
 // ── Command matching ────────────────────────────────────────────────────────
 
 /**
- * Match a user prompt against the adapter's command map.
+ * Match a user prompt against universal /aura: commands and adapter commands.
+ * Universal commands are checked first.
  * Returns { action, changeId } or null if no match.
  */
 function matchCommand(prompt) {
+  // Check universal /aura: commands first
+  for (const [trigger, action] of Object.entries(AURA_COMMANDS)) {
+    const escaped = trigger.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(`(?:^|\\s)${escaped}(?:\\s+(\\S+))?(?:\\s|$)`);
+    const m = prompt.match(re);
+    if (m) {
+      return { action, changeId: m[1] || null };
+    }
+  }
+  // Then check adapter-specific commands
   for (const [trigger, action] of Object.entries(ADAPTER.commands)) {
-    // Build a regex: escape the trigger, then allow an optional trailing argument
     const escaped = trigger.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const re = new RegExp(`(?:^|\\s)${escaped}(?:\\s+(\\S+))?(?:\\s|$)`);
     const m = prompt.match(re);
@@ -297,6 +320,31 @@ function matchCommand(prompt) {
     }
   }
   return null;
+}
+
+function formatStatus(state) {
+  const phase = state.status;
+  const phaseIdx = PHASES.indexOf(phase);
+  const bar = PHASES.map((p, i) => {
+    if (i < phaseIdx) return `[${p}]`;
+    if (i === phaseIdx) return `> ${p} <`;
+    return `  ${p}  `;
+  }).join(" ");
+
+  const elapsed = state.started_at
+    ? `${Math.round((Date.now() - new Date(state.started_at).getTime()) / 1000)}s`
+    : "?";
+
+  const tc = state.tool_calls || {};
+  const lines = [
+    `AURA: ${state.change_id} (${state.adapter || "unknown"})`,
+    `  Phase: ${bar}`,
+    `  Elapsed: ${elapsed}`,
+    `  Tool calls: ${tc.total || 0} (W:${tc.Write || 0} E:${tc.Edit || 0} B:${tc.Bash || 0})`,
+    `  Apply iterations: ${state.apply_iterations || 0}  |  Recovery: ${state.recovery_attempts || 0}`,
+    `  Tasks: ${state.spec_data?.tasks_completed || 0}/${state.spec_data?.tasks_count || 0} completed`,
+  ];
+  return lines.join("\n");
 }
 
 // ── Event Handlers ──────────────────────────────────────────────────────────
@@ -320,6 +368,39 @@ function handleUserPromptSubmit(input) {
 
   const { action } = matched;
   let changeId = matched.changeId;
+
+  // status and cancel don't require a changeId argument — they use active deliverable
+  if (action === "status") {
+    const active = changeId ? loadState(changeId) : findActiveDeliverable();
+    if (active) {
+      process.stderr.write(formatStatus(active) + "\n");
+    } else {
+      process.stderr.write("AURA: no active deliverable\n");
+    }
+    outputSuppress();
+    return;
+  }
+
+  if (action === "cancel") {
+    const active = changeId ? loadState(changeId) : findActiveDeliverable();
+    if (active) {
+      active.status = "cancelled";
+      const ts = nowISO();
+      const current = active.status;
+      // Close current phase
+      for (const phaseName of PHASES) {
+        if (active.phases[phaseName] && !active.phases[phaseName].completed_at) {
+          active.phases[phaseName].completed_at = ts;
+        }
+      }
+      saveState(active);
+      process.stderr.write(`AURA: cancelled deliverable '${active.change_id}'\n`);
+    } else {
+      process.stderr.write("AURA: no active deliverable to cancel\n");
+    }
+    outputSuppress();
+    return;
+  }
 
   if (!changeId) {
     const active = findActiveDeliverable();

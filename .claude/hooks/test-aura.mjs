@@ -379,12 +379,165 @@ try {
   no(`Fallback test failed: ${e.message}`);
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// Universal /aura: Command Tests
+// ══════════════════════════════════════════════════════════════════════════════
+
+console.log("");
+console.log("═══════════════════════════════════════════════════════════════");
+console.log("  Universal /aura: Command Tests");
+console.log("═══════════════════════════════════════════════════════════════");
+
+// New isolated dirs — NO .aura.json, so no adapter config at all
+const UA_HOME = mkdtempSync(join(tmpdir(), "aura-test-ua-home-"));
+const UA_PROJECT = mkdtempSync(join(tmpdir(), "aura-test-ua-project-"));
+const UA_AURA = join(UA_HOME, ".aura");
+
+function runUaHook(eventType, stdinData = "{}") {
+  return execSync(`node "${HOOK}" ${eventType}`, {
+    input: stdinData,
+    env: { ...process.env, HOME: UA_HOME, CLAUDE_PROJECT_DIR: UA_PROJECT },
+    encoding: "utf8",
+    timeout: 10000,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+}
+
+function runUaHookStderr(eventType, stdinData = "{}") {
+  try {
+    execSync(`node "${HOOK}" ${eventType} 2>&1 1>/dev/null`, {
+      input: stdinData,
+      env: { ...process.env, HOME: UA_HOME, CLAUDE_PROJECT_DIR: UA_PROJECT },
+      encoding: "utf8",
+      timeout: 10000,
+    });
+  } catch { /* ignore */ }
+  // Re-run capturing stderr properly
+  const out = execSync(`node "${HOOK}" ${eventType} 2>&1 1>/dev/null || true`, {
+    input: stdinData,
+    env: { ...process.env, HOME: UA_HOME, CLAUDE_PROJECT_DIR: UA_PROJECT },
+    encoding: "utf8",
+    timeout: 10000,
+  });
+  return out;
+}
+
+console.log("");
+
+// ── Test 20: /aura:start ────────────────────────────────────────────────────
+
+console.log("Test 20: /aura:start my-feature");
+runUaHook("UserPromptSubmit", JSON.stringify({ prompt: "/aura:start my-feature" }));
+const uaState = join(UA_AURA, "deliverables", "my-feature.json");
+checkFile(uaState, "/aura:start creates deliverable");
+checkField(uaState, "status", "propose", "/aura:start sets status to propose");
+
+// ── Test 21: /aura:status ───────────────────────────────────────────────────
+
+console.log("");
+console.log("Test 21: /aura:status");
+try {
+  const stderr = runUaHookStderr("UserPromptSubmit", JSON.stringify({ prompt: "/aura:status" }));
+  stderr.includes("my-feature") ? ok("/aura:status reports active deliverable") : no(`/aura:status should mention 'my-feature', got: ${stderr.trim()}`);
+  stderr.includes("propose") ? ok("/aura:status shows current phase") : no("/aura:status should show phase");
+} catch (e) {
+  no(`/aura:status failed: ${e.message}`);
+}
+
+// ── Test 22: /aura:next ─────────────────────────────────────────────────────
+
+console.log("");
+console.log("Test 22: /aura:next (advance)");
+runUaHook("UserPromptSubmit", JSON.stringify({ prompt: "/aura:next" }));
+checkField(uaState, "status", "specs", "/aura:next advances from propose to specs");
+
+runUaHook("UserPromptSubmit", JSON.stringify({ prompt: "/aura:next" }));
+checkField(uaState, "status", "design", "/aura:next advances from specs to design");
+
+// ── Test 23: /aura:ff ───────────────────────────────────────────────────────
+
+console.log("");
+console.log("Test 23: /aura:ff (restart and fast-forward)");
+runUaHook("UserPromptSubmit", JSON.stringify({ prompt: "/aura:start ff-test" }));
+const uaState2 = join(UA_AURA, "deliverables", "ff-test.json");
+runUaHook("UserPromptSubmit", JSON.stringify({ prompt: "/aura:ff ff-test" }));
+checkField(uaState2, "status", "tasks", "/aura:ff fast-forwards to tasks");
+
+// ── Test 24: /aura:apply ────────────────────────────────────────────────────
+
+console.log("");
+console.log("Test 24: /aura:apply");
+// Cancel ff-test first so my-feature is active again... actually let's just use ff-test
+runUaHook("UserPromptSubmit", JSON.stringify({ prompt: "/aura:apply ff-test" }));
+checkField(uaState2, "status", "apply", "/aura:apply jumps to apply");
+
+// ── Test 25: /aura:verify ───────────────────────────────────────────────────
+
+console.log("");
+console.log("Test 25: /aura:verify");
+runUaHook("UserPromptSubmit", JSON.stringify({ prompt: "/aura:verify ff-test" }));
+checkField(uaState2, "status", "verify", "/aura:verify jumps to verify");
+
+// ── Test 26: /aura:done ─────────────────────────────────────────────────────
+
+console.log("");
+console.log("Test 26: /aura:done");
+runUaHook("UserPromptSubmit", JSON.stringify({ prompt: "/aura:done ff-test" }));
+checkField(uaState2, "status", "completed", "/aura:done completes deliverable");
+
+const uaMetrics = join(UA_AURA, "metrics", "ff-test.json");
+checkFile(uaMetrics, "/aura:done emits metrics file");
+
+// ── Test 27: /aura:cancel ──────────────────────────────────────────────────
+
+console.log("");
+console.log("Test 27: /aura:cancel");
+// my-feature is still active (in design phase)
+runUaHook("UserPromptSubmit", JSON.stringify({ prompt: "/aura:cancel my-feature" }));
+checkField(uaState, "status", "cancelled", "/aura:cancel sets status to cancelled");
+
+// Verify cancelled deliverables are skipped
+runUaHook("UserPromptSubmit", JSON.stringify({ prompt: "/aura:start after-cancel" }));
+const uaState3 = join(UA_AURA, "deliverables", "after-cancel.json");
+checkFile(uaState3, "New deliverable created after cancel");
+checkField(uaState3, "status", "propose", "New deliverable starts in propose");
+
+// ── Test 28: /aura:status with no active deliverable ────────────────────────
+
+console.log("");
+console.log("Test 28: /aura:status (no active)");
+// Complete after-cancel
+runUaHook("UserPromptSubmit", JSON.stringify({ prompt: "/aura:ff after-cancel" }));
+runUaHook("UserPromptSubmit", JSON.stringify({ prompt: "/aura:apply after-cancel" }));
+runUaHook("UserPromptSubmit", JSON.stringify({ prompt: "/aura:done after-cancel" }));
+try {
+  const stderr = runUaHookStderr("UserPromptSubmit", JSON.stringify({ prompt: "/aura:status" }));
+  stderr.includes("no active") ? ok("/aura:status reports no active deliverable") : no("/aura:status should say 'no active'");
+} catch (e) {
+  no(`/aura:status (empty) failed: ${e.message}`);
+}
+
+// ── Test 29: /aura: commands work alongside adapter commands ────────────────
+
+console.log("");
+console.log("Test 29: /aura: commands coexist with adapter commands");
+// Use OpenSpec project with default adapter (no .aura.json)
+// /aura:start should work alongside /opsx:* commands
+runUaHook("UserPromptSubmit", JSON.stringify({ prompt: "/aura:start coexist-test" }));
+const coexistState = join(UA_AURA, "deliverables", "coexist-test.json");
+checkField(coexistState, "status", "propose", "/aura:start works");
+// Now use /opsx:ff on same deliverable (default adapter has these)
+runUaHook("UserPromptSubmit", JSON.stringify({ prompt: "/opsx:ff coexist-test" }));
+checkField(coexistState, "status", "tasks", "/opsx:ff works alongside /aura: commands");
+
 // ── Cleanup ─────────────────────────────────────────────────────────────────
 
 try { rmSync(FAKE_HOME, { recursive: true, force: true }); } catch { /* ignore */ }
 try { rmSync(PROJECT_DIR, { recursive: true, force: true }); } catch { /* ignore */ }
 try { rmSync(SK_HOME, { recursive: true, force: true }); } catch { /* ignore */ }
 try { rmSync(SK_PROJECT, { recursive: true, force: true }); } catch { /* ignore */ }
+try { rmSync(UA_HOME, { recursive: true, force: true }); } catch { /* ignore */ }
+try { rmSync(UA_PROJECT, { recursive: true, force: true }); } catch { /* ignore */ }
 
 // ── Summary ─────────────────────────────────────────────────────────────────
 

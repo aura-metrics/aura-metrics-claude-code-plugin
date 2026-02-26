@@ -26,12 +26,27 @@ Supports multiple spec frameworks via adapter config:
 | [SpecKit](https://github.com/github/spec-kit) | `/speckit.specify`, `/speckit.implement`, `/speckit.checklist` | `node .claude/hooks/aura-setup.mjs speckit` |
 | Custom | Your own commands | `node .claude/hooks/aura-setup.mjs` (interactive) |
 
+### Universal commands
+
+These `/aura:*` commands always work — with any framework, or no framework at all:
+
+```
+/aura:start <name>  →  Start tracking a new deliverable
+/aura:next          →  Advance to the next phase
+/aura:ff            →  Fast-forward to tasks phase
+/aura:apply         →  Jump to apply phase (tool calls counted)
+/aura:verify        →  Jump to verify phase
+/aura:done          →  Complete deliverable, emit metrics
+/aura:status        →  Print current deliverable state
+/aura:cancel        →  Abandon current deliverable
+```
+
 Hook events used:
 
 | Hook Event | Action |
 |---|---|
 | `SessionStart` | Load any in-progress deliverable |
-| `UserPromptSubmit` | Detect `/opsx:*` commands, transition phases |
+| `UserPromptSubmit` | Detect `/aura:*` and adapter commands, transition phases |
 | `PostToolUse` | Count tool calls during `apply` phase |
 | `Stop` | Record iteration completions |
 | `SessionEnd` | Persist state |
