@@ -252,10 +252,139 @@ runHook("PostToolUse", JSON.stringify({ tool_name: "Write" }));
 const stateFile2 = join(AURA_DIR, "deliverables", "test-feature-2.json");
 checkField(stateFile2, "tool_calls.total", "0", "Tool calls not incremented outside apply");
 
+// ══════════════════════════════════════════════════════════════════════════════
+// SpecKit Adapter Tests
+// ══════════════════════════════════════════════════════════════════════════════
+
+console.log("");
+console.log("═══════════════════════════════════════════════════════════════");
+console.log("  SpecKit Adapter Tests");
+console.log("═══════════════════════════════════════════════════════════════");
+
+// New isolated dirs for SpecKit tests
+const SK_HOME = mkdtempSync(join(tmpdir(), "aura-test-sk-home-"));
+const SK_PROJECT = mkdtempSync(join(tmpdir(), "aura-test-sk-project-"));
+const SK_AURA = join(SK_HOME, ".aura");
+
+function runSkHook(eventType, stdinData = "{}") {
+  return execSync(`node "${HOOK}" ${eventType}`, {
+    input: stdinData,
+    env: { ...process.env, HOME: SK_HOME, CLAUDE_PROJECT_DIR: SK_PROJECT },
+    encoding: "utf8",
+    timeout: 10000,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+}
+
+// Write SpecKit adapter config
+writeFileSync(join(SK_PROJECT, ".aura.json"), JSON.stringify({
+  adapter: "speckit",
+  commands: {
+    "/speckit.specify": "propose",
+    "/speckit.plan": "advance",
+    "/speckit.tasks": "advance",
+    "/speckit.implement": "apply",
+    "/speckit.checklist": "verify",
+    "/aura:archive": "archive",
+  },
+  changes_dir: "specs",
+  tasks_patterns: ["tasks.md"],
+}, null, 2));
+
+// Create SpecKit-style spec structure
+const SK_SPEC_DIR = join(SK_PROJECT, "specs", "add-auth");
+mkdirSync(SK_SPEC_DIR, { recursive: true });
+writeFileSync(join(SK_SPEC_DIR, "spec.md"), "# Auth Spec\n- Req A\n- Req B\n");
+writeFileSync(join(SK_SPEC_DIR, "plan.md"), "# Plan\nUse JWT.\n");
+writeFileSync(join(SK_SPEC_DIR, "tasks.md"), "# Tasks\n- [x] Task A\n- [x] Task B\n- [x] Task C\n- [ ] Task D\n");
+console.log("");
+
+// ── Test 13: SpecKit /speckit.specify ───────────────────────────────────────
+
+console.log("Test 13: /speckit.specify add-auth");
+runSkHook("UserPromptSubmit", JSON.stringify({ prompt: "/speckit.specify add-auth" }));
+const skState = join(SK_AURA, "deliverables", "add-auth.json");
+checkFile(skState, "SpecKit state file created");
+checkField(skState, "status", "propose", "SpecKit status is 'propose'");
+checkField(skState, "adapter", "speckit", "Adapter recorded as 'speckit'");
+
+// ── Test 14: SpecKit /speckit.plan ─────────────────────────────────────────
+
+console.log("");
+console.log("Test 14: /speckit.plan (advance)");
+runSkHook("UserPromptSubmit", JSON.stringify({ prompt: "/speckit.plan" }));
+checkField(skState, "status", "specs", "Status advanced to 'specs'");
+
+// ── Test 15: SpecKit /speckit.tasks ────────────────────────────────────────
+
+console.log("");
+console.log("Test 15: /speckit.tasks (advance again)");
+runSkHook("UserPromptSubmit", JSON.stringify({ prompt: "/speckit.tasks" }));
+checkField(skState, "status", "design", "Status advanced to 'design'");
+
+// ── Test 16: SpecKit /speckit.implement ────────────────────────────────────
+
+console.log("");
+console.log("Test 16: /speckit.implement (apply)");
+runSkHook("UserPromptSubmit", JSON.stringify({ prompt: "/speckit.implement" }));
+checkField(skState, "status", "apply", "SpecKit status is 'apply'");
+
+// Tool calls during apply
+runSkHook("PostToolUse", JSON.stringify({ tool_name: "Write" }));
+runSkHook("PostToolUse", JSON.stringify({ tool_name: "Edit" }));
+checkField(skState, "tool_calls.Write", "1", "SpecKit Write count = 1");
+checkField(skState, "tool_calls.total", "2", "SpecKit total count = 2");
+
+// ── Test 17: SpecKit /speckit.checklist ────────────────────────────────────
+
+console.log("");
+console.log("Test 17: /speckit.checklist (verify)");
+runSkHook("UserPromptSubmit", JSON.stringify({ prompt: "/speckit.checklist" }));
+checkField(skState, "status", "verify", "SpecKit status is 'verify'");
+
+// ── Test 18: SpecKit /aura:archive ─────────────────────────────────────────
+
+console.log("");
+console.log("Test 18: /aura:archive (complete)");
+runSkHook("UserPromptSubmit", JSON.stringify({ prompt: "/aura:archive" }));
+checkField(skState, "status", "completed", "SpecKit status is 'completed'");
+
+const skMetrics = join(SK_AURA, "metrics", "add-auth.json");
+checkFile(skMetrics, "SpecKit metrics file created");
+checkField(skMetrics, "adapter", "speckit", "Metrics record adapter is 'speckit'");
+checkField(skMetrics, "metrics.tasks_total", "4", "SpecKit tasks_total = 4");
+checkField(skMetrics, "metrics.tasks_completed", "3", "SpecKit tasks_completed = 3");
+
+// ── Test 19: Fallback to default adapter (no .aura.json) ──────────────────
+
+console.log("");
+console.log("Test 19: No .aura.json falls back to OpenSpec");
+const NO_CFG_HOME = mkdtempSync(join(tmpdir(), "aura-test-nocfg-"));
+const NO_CFG_PROJECT = mkdtempSync(join(tmpdir(), "aura-test-nocfg-proj-"));
+// No .aura.json written — should use default OpenSpec adapter
+try {
+  const out = execSync(`node "${HOOK}" UserPromptSubmit`, {
+    input: JSON.stringify({ prompt: "/opsx:propose fallback-test" }),
+    env: { ...process.env, HOME: NO_CFG_HOME, CLAUDE_PROJECT_DIR: NO_CFG_PROJECT },
+    encoding: "utf8",
+    timeout: 10000,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  const ncState = join(NO_CFG_HOME, ".aura", "deliverables", "fallback-test.json");
+  checkFile(ncState, "Fallback: state created without .aura.json");
+  checkField(ncState, "adapter", "openspec", "Fallback: adapter is 'openspec'");
+  try { rmSync(NO_CFG_HOME, { recursive: true, force: true }); } catch { /* ignore */ }
+  try { rmSync(NO_CFG_PROJECT, { recursive: true, force: true }); } catch { /* ignore */ }
+} catch (e) {
+  no(`Fallback test failed: ${e.message}`);
+}
+
 // ── Cleanup ─────────────────────────────────────────────────────────────────
 
 try { rmSync(FAKE_HOME, { recursive: true, force: true }); } catch { /* ignore */ }
 try { rmSync(PROJECT_DIR, { recursive: true, force: true }); } catch { /* ignore */ }
+try { rmSync(SK_HOME, { recursive: true, force: true }); } catch { /* ignore */ }
+try { rmSync(SK_PROJECT, { recursive: true, force: true }); } catch { /* ignore */ }
 
 // ── Summary ─────────────────────────────────────────────────────────────────
 

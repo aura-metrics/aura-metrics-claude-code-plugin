@@ -16,16 +16,15 @@ Passive metrics collection for AI agent performance using [Claude Code hooks](ht
 
 ## How It Works
 
-Claude Code hooks observe [OpenSpec](https://github.com/openspec) slash commands and automatically record timestamps, tool usage, and conformance scores — all in the background with zero friction.
+Claude Code hooks observe spec-framework slash commands and automatically record timestamps, tool usage, and conformance scores — all in the background with zero friction.
 
-```
-/opsx:propose  →  Starts tracking a new deliverable
-/opsx:ff       →  Fast-forwards through specs/design/tasks
-/opsx:continue →  Advances to the next phase
-/opsx:apply    →  Begins implementation (tool calls are counted)
-/opsx:verify   →  Verification phase
-/opsx:archive  →  Completes deliverable, emits final metrics
-```
+Supports multiple spec frameworks via adapter config:
+
+| Framework | Commands | Setup |
+|---|---|---|
+| [OpenSpec](https://github.com/openspec) (default) | `/opsx:propose`, `/opsx:apply`, `/opsx:archive` | Works out of the box |
+| [SpecKit](https://github.com/github/spec-kit) | `/speckit.specify`, `/speckit.implement`, `/speckit.checklist` | `node .claude/hooks/aura-setup.mjs speckit` |
+| Custom | Your own commands | `node .claude/hooks/aura-setup.mjs` (interactive) |
 
 Hook events used:
 
@@ -46,7 +45,15 @@ git clone https://github.com/aura-metrics/aura-metrics-claude-code-plugin.git
 cp -r aura-metrics-claude-code-plugin/.claude /path/to/your/project/.claude
 ```
 
-2. That's it. No dependencies beyond Node.js (which Claude Code already requires).
+2. Run setup if you're not using OpenSpec:
+
+```bash
+node .claude/hooks/aura-setup.mjs          # interactive
+node .claude/hooks/aura-setup.mjs speckit   # SpecKit
+node .claude/hooks/aura-setup.mjs openspec  # OpenSpec (default, optional)
+```
+
+3. That's it. No dependencies beyond Node.js (which Claude Code already requires).
 
 The directories `~/.aura/deliverables/` and `~/.aura/metrics/` are created automatically on first use.
 
@@ -79,9 +86,11 @@ For machine-readable output: `node .claude/hooks/aura-view.mjs --json`
 |---|---|
 | `.claude/hooks/aura-hook.mjs` | Main hook handler (all events) |
 | `.claude/hooks/aura-view.mjs` | CLI metrics dashboard |
+| `.claude/hooks/aura-setup.mjs` | Adapter setup command |
 | `.claude/hooks/test-aura.mjs` | Integration test script |
 | `.claude/hooks/AURA-README.md` | Hook-specific documentation |
 | `.claude/settings.json` | Hook wiring configuration |
+| `.aura.json` (project root) | Adapter config (created by setup) |
 
 ## Running Tests
 

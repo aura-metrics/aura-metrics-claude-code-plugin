@@ -1,4 +1,4 @@
-# AURA Metrics for Claude Code + OpenSpec
+# AURA Metrics for Claude Code
 
 AURA (Autonomous Unit Resolution Analytics) measures AI agent performance — like DORA, but for agents instead of pipelines.
 
@@ -14,22 +14,31 @@ AURA (Autonomous Unit Resolution Analytics) measures AI agent performance — li
 
 ## How It Works
 
-Claude Code hooks fire automatically as you use OpenSpec commands:
+Claude Code hooks fire automatically as you use spec-framework commands. Supports OpenSpec, SpecKit, and custom adapters.
 
+**OpenSpec** (default):
 ```
-/opsx:propose  →  Starts tracking a new deliverable
-/opsx:ff       →  Fast-forwards through specs/design/tasks
-/opsx:continue →  Advances to the next phase
-/opsx:apply    →  Begins implementation (tool calls are counted)
-/opsx:verify   →  Verification phase
-/opsx:archive  →  Completes deliverable, emits final metrics
+/opsx:propose → /opsx:ff → /opsx:apply → /opsx:verify → /opsx:archive
+```
+
+**SpecKit**:
+```
+/speckit.specify → /speckit.plan → /speckit.tasks → /speckit.implement → /speckit.checklist → /aura:archive
 ```
 
 All tracking is invisible — hooks run in the background with `suppressOutput: true`.
 
 ## Installation
 
-The hooks are configured in `.claude/settings.json`. No additional setup is needed — the hook script uses only Node.js built-ins (which Claude Code already requires).
+The hooks are configured in `.claude/settings.json`. For OpenSpec, no additional setup is needed.
+
+For other frameworks, run setup:
+```bash
+node .claude/hooks/aura-setup.mjs speckit   # SpecKit
+node .claude/hooks/aura-setup.mjs           # interactive (custom)
+```
+
+This writes a `.aura.json` config to your project root. The hook script uses only Node.js built-ins (which Claude Code already requires).
 
 Directories `~/.aura/deliverables/` and `~/.aura/metrics/` are created automatically on first use.
 
@@ -39,8 +48,10 @@ Directories `~/.aura/deliverables/` and `~/.aura/metrics/` are created automatic
 |---|---|
 | `.claude/hooks/aura-hook.mjs` | Main hook handler (all events) |
 | `.claude/hooks/aura-view.mjs` | CLI metrics dashboard |
+| `.claude/hooks/aura-setup.mjs` | Adapter setup command |
 | `.claude/hooks/test-aura.mjs` | Integration test script |
 | `.claude/settings.json` | Hook wiring configuration |
+| `.aura.json` | Adapter config (project root, created by setup) |
 
 ## Viewing Metrics
 

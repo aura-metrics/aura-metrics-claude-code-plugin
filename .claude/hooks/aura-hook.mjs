@@ -3,7 +3,9 @@
  * AURA Metrics Collection Hook for Claude Code.
  *
  * Handles all hook events (SessionStart, UserPromptSubmit, PostToolUse, Stop, SessionEnd)
- * to passively collect AURA metrics as OpenSpec deliverables flow through their lifecycle.
+ * to passively collect AURA metrics as spec-driven deliverables flow through their lifecycle.
+ *
+ * Supports multiple spec frameworks (OpenSpec, SpecKit, custom) via .aura.json adapter config.
  *
  * Usage: node aura-hook.mjs <EventType>
  * Reads hook context JSON from stdin, writes hook response JSON to stdout.
@@ -11,7 +13,7 @@
 
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, renameSync, unlinkSync, existsSync, statSync } from "fs";
 import { join, dirname } from "path";
-import { homedir, tmpdir } from "os";
+import { homedir } from "os";
 import { randomBytes } from "crypto";
 
 // ── Paths ───────────────────────────────────────────────────────────────────
@@ -28,6 +30,38 @@ const PHASES = ["propose", "specs", "design", "tasks", "apply", "verify", "archi
 // ── Tracked tool names ──────────────────────────────────────────────────────
 
 const TRACKED_TOOLS = new Set(["Write", "Edit", "MultiEdit", "Bash", "Read", "Grep", "Glob"]);
+
+// ── Default adapter (OpenSpec) ──────────────────────────────────────────────
+
+const DEFAULT_ADAPTER = {
+  adapter: "openspec",
+  commands: {
+    "/opsx:propose": "propose",
+    "/opsx:new": "propose",
+    "/opsx:ff": "fast_forward",
+    "/opsx:continue": "advance",
+    "/opsx:apply": "apply",
+    "/opsx:verify": "verify",
+    "/opsx:archive": "archive",
+  },
+  changes_dir: "openspec/changes",
+  tasks_patterns: ["tasks.md", "tasks/tasks.md"],
+};
+
+// ── Load adapter config ─────────────────────────────────────────────────────
+
+function loadAdapterConfig() {
+  const configPath = join(PROJECT_DIR, ".aura.json");
+  try {
+    if (existsSync(configPath)) {
+      const config = JSON.parse(readFileSync(configPath, "utf8"));
+      if (config.commands && config.changes_dir) return config;
+    }
+  } catch { /* fall through */ }
+  return DEFAULT_ADAPTER;
+}
+
+const ADAPTER = loadAdapterConfig();
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -81,8 +115,8 @@ function findActiveDeliverable() {
   return null;
 }
 
-function detectChangeIdFromOpenspec() {
-  const changesDir = join(PROJECT_DIR, "openspec", "changes");
+function detectChangeIdFromSpec() {
+  const changesDir = join(PROJECT_DIR, ADAPTER.changes_dir);
   try {
     if (!statSync(changesDir).isDirectory()) return null;
   } catch {
@@ -101,6 +135,7 @@ function detectChangeIdFromOpenspec() {
 function newState(changeId) {
   return {
     change_id: changeId,
+    adapter: ADAPTER.adapter,
     status: "propose",
     started_at: nowISO(),
     phases: {
@@ -153,10 +188,8 @@ function fastForward(state) {
 }
 
 function parseTasksMd(changeId) {
-  const candidates = [
-    join(PROJECT_DIR, "openspec", "changes", changeId, "tasks.md"),
-    join(PROJECT_DIR, "openspec", "changes", changeId, "tasks", "tasks.md"),
-  ];
+  const patterns = ADAPTER.tasks_patterns || ["tasks.md"];
+  const candidates = patterns.map(p => join(PROJECT_DIR, ADAPTER.changes_dir, changeId, p));
   for (const p of candidates) {
     try {
       const content = readFileSync(p, "utf8");
@@ -224,6 +257,7 @@ function emitMetrics(state) {
 
   const record = {
     change_id: state.change_id,
+    adapter: state.adapter || ADAPTER.adapter,
     completed_at: nowISO(),
     metrics: {
       resolution_latency_seconds: resolutionLatency,
@@ -246,6 +280,25 @@ function outputSuppress() {
   process.stdout.write(JSON.stringify({ suppressOutput: true }) + "\n");
 }
 
+// ── Command matching ────────────────────────────────────────────────────────
+
+/**
+ * Match a user prompt against the adapter's command map.
+ * Returns { action, changeId } or null if no match.
+ */
+function matchCommand(prompt) {
+  for (const [trigger, action] of Object.entries(ADAPTER.commands)) {
+    // Build a regex: escape the trigger, then allow an optional trailing argument
+    const escaped = trigger.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(`(?:^|\\s)${escaped}(?:\\s+(\\S+))?(?:\\s|$)`);
+    const m = prompt.match(re);
+    if (m) {
+      return { action, changeId: m[1] || null };
+    }
+  }
+  return null;
+}
+
 // ── Event Handlers ──────────────────────────────────────────────────────────
 
 function handleSessionStart(_input) {
@@ -262,25 +315,25 @@ function handleUserPromptSubmit(input) {
   const prompt = input.prompt || (input.message && input.message.content) || "";
   if (!prompt) { outputSuppress(); return; }
 
-  const match = prompt.match(/\/opsx:(propose|new|ff|continue|apply|verify|archive)(?:\s+(\S+))?/);
-  if (!match) { outputSuppress(); return; }
+  const matched = matchCommand(prompt);
+  if (!matched) { outputSuppress(); return; }
 
-  const command = match[1];
-  let changeId = match[2] || null;
+  const { action } = matched;
+  let changeId = matched.changeId;
 
   if (!changeId) {
     const active = findActiveDeliverable();
     if (active) changeId = active.change_id;
-    else changeId = detectChangeIdFromOpenspec();
+    else changeId = detectChangeIdFromSpec();
     if (!changeId) { outputSuppress(); return; }
   }
 
-  if (command === "propose" || command === "new") {
+  if (action === "propose") {
     saveState(newState(changeId));
-  } else if (command === "ff") {
+  } else if (action === "fast_forward") {
     let state = loadState(changeId) || findActiveDeliverable();
     if (state) { state = fastForward(state); saveState(state); }
-  } else if (command === "continue") {
+  } else if (action === "advance") {
     let state = loadState(changeId) || findActiveDeliverable();
     if (state) {
       const idx = PHASES.indexOf(state.status);
@@ -289,17 +342,17 @@ function handleUserPromptSubmit(input) {
         saveState(state);
       }
     }
-  } else if (command === "apply") {
+  } else if (action === "apply") {
     let state = loadState(changeId) || findActiveDeliverable();
     if (state) {
       state = transitionPhase(state, "apply");
       for (const key of Object.keys(state.tool_calls)) state.tool_calls[key] = 0;
       saveState(state);
     }
-  } else if (command === "verify") {
+  } else if (action === "verify") {
     let state = loadState(changeId) || findActiveDeliverable();
     if (state) { state = transitionPhase(state, "verify"); saveState(state); }
-  } else if (command === "archive") {
+  } else if (action === "archive") {
     let state = loadState(changeId) || findActiveDeliverable();
     if (state) {
       state = transitionPhase(state, "archive");
