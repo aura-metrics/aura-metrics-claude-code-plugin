@@ -105,15 +105,14 @@ Failed if overall < 0.5.
 | `~/.aura/deliverables/<id>.json` | Active deliverable state (phases, tool counts) |
 | `~/.aura/metrics/<id>.json` | Final metrics (emitted on completion) |
 
-## Five Metrics
+## Four Metrics
 
 | Metric | Elite | High | Medium | Low |
 |---|---|---|---|---|
-| Feature Throughput | ≥3/day | ≥1/day | ≥1/week | <1/week |
-| Resolution Latency | <1hr | <4hr | <1day | ≥1day |
-| Failure Rate | <5% | <10% | <15% | ≥15% |
+| Feature Frequency | ≥3/day | ≥1/day | ≥1/week | <1/week |
+| Feature Lead Time | <1hr | <4hr | <1day | ≥1day |
+| Human Intervention Rate | <5% | <10% | <15% | ≥15% |
 | Recovery Efficiency | <5% overhead | <10% | <20% | ≥20% |
-| Spec Conformance | ≥0.95 | ≥0.85 | ≥0.70 | <0.70 |
 
 ## Files
 

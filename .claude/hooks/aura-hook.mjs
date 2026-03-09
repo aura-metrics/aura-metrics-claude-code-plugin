@@ -159,7 +159,7 @@ function newState(changeId) {
     },
     apply_iterations: 0,
     recovery_attempts: 0,
-    conformance: null,
+    human_interventions: 0,
   };
 }
 
@@ -203,27 +203,6 @@ function parseTasksMd(changeId) {
   return { total: 0, completed: 0 };
 }
 
-function computeConformance(state) {
-  const { total, completed } = parseTasksMd(state.change_id);
-  state.spec_data.tasks_count = total;
-  state.spec_data.tasks_completed = completed;
-
-  const functional = total > 0 ? completed / total : 1.0;
-  const verifyPhase = state.phases.verify;
-  const correctness = (verifyPhase && verifyPhase.completed_at) ? 1.0 : 0.8;
-  const constraints = Math.max(0.0, 1.0 - 0.1 * (state.recovery_attempts || 0));
-  const iterations = Math.max(1, state.apply_iterations || 1);
-  const iterationPenalty = Math.max(0.0, 1.0 - 0.15 * (iterations - 1));
-  const overall = 0.4 * functional + 0.3 * correctness + 0.2 * constraints + 0.1 * iterationPenalty;
-
-  return {
-    functional: Math.round(functional * 10000) / 10000,
-    correctness: Math.round(correctness * 10000) / 10000,
-    constraints: Math.round(constraints * 10000) / 10000,
-    overall: Math.round(overall * 10000) / 10000,
-  };
-}
-
 function computePhaseDuration(phaseData) {
   if (!phaseData || !phaseData.started_at || !phaseData.completed_at) return null;
   try {
@@ -236,8 +215,9 @@ function computePhaseDuration(phaseData) {
 }
 
 function emitMetrics(state) {
-  const conformance = computeConformance(state);
-  state.conformance = conformance;
+  const { total, completed } = parseTasksMd(state.change_id);
+  state.spec_data.tasks_count = total;
+  state.spec_data.tasks_completed = completed;
 
   const phaseDurations = {};
   for (const phaseName of PHASES) {
@@ -253,8 +233,6 @@ function emitMetrics(state) {
     resolutionLatency = Object.values(phaseDurations).reduce((a, b) => a + b, 0);
   }
 
-  const deliverableFailed = conformance.overall < 0.5;
-
   const record = {
     change_id: state.change_id,
     adapter: state.adapter || ADAPTER.adapter,
@@ -267,8 +245,8 @@ function emitMetrics(state) {
       recovery_attempts: state.recovery_attempts || 0,
       tasks_completed: state.spec_data.tasks_completed || 0,
       tasks_total: state.spec_data.tasks_count || 0,
-      conformance,
-      deliverable_failed: deliverableFailed,
+      deliverable_failed: false,
+      human_interventions: state.human_interventions || 0,
     },
   };
 

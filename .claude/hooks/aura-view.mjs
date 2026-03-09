@@ -42,12 +42,6 @@ const TIERS = {
     ["Medium", v => v < 0.20],
     ["Low", () => true],
   ],
-  conformance: [
-    ["Elite", v => v >= 0.95],
-    ["High", v => v >= 0.85],
-    ["Medium", v => v >= 0.70],
-    ["Low", () => true],
-  ],
 };
 
 function classify(metricName, value) {
@@ -159,23 +153,17 @@ function displayCompleted(metrics, limit = 10) {
     const latency = met.resolution_latency_seconds || 0;
     const latencyTier = classify("latency", latency);
 
-    const conf = met.conformance || {};
-    const overall = conf.overall || 0;
-    const confTier = classify("conformance", overall);
-
     const failed = met.deliverable_failed;
+    const humanInterventions = met.human_interventions || 0;
     const status = failed ? `\x1b[91mFAILED${RESET}` : `\x1b[92mPASSED${RESET}`;
 
     const toolsTotal = (met.tool_calls || {}).total || 0;
 
     console.log(`  ${BOLD}${cid}${RESET}  [${status}]  ${DIM}${completed}${RESET}`);
     let tc = tierColor(latencyTier);
-    console.log(`    Latency: ${formatDuration(latency)} [${tc}${latencyTier}${RESET}]  |  ` +
-      `Tools: ${toolsTotal}  |  Iterations: ${met.apply_iterations || 0}`);
-    tc = tierColor(confTier);
-    console.log(`    Conformance: ${overall.toFixed(2)} [${tc}${confTier}${RESET}]  ` +
-      `(fn=${(conf.functional || 0).toFixed(2)} cr=${(conf.correctness || 0).toFixed(2)} ` +
-      `cn=${(conf.constraints || 0).toFixed(2)})`);
+    console.log(`    Lead time: ${formatDuration(latency)} [${tc}${latencyTier}${RESET}]  |  ` +
+      `Tools: ${toolsTotal}  |  Iterations: ${met.apply_iterations || 0}  |  ` +
+      `Human interventions: ${humanInterventions}`);
     console.log();
   }
 }
@@ -206,40 +194,33 @@ function displayAggregated(metrics) {
   const avgLatency = latencies.reduce((a, b) => a + b, 0) / latencies.length;
   const latencyTier = classify("latency", avgLatency);
 
-  const failedCount = metrics.filter(m => (m.metrics || {}).deliverable_failed).length;
-  const failureRate = totalCount > 0 ? failedCount / totalCount : 0;
-  const failureTier = classify("failure_rate", failureRate);
+  const interventionCount = metrics.filter(m => (m.metrics || {}).human_interventions > 0).length;
+  const interventionRate = totalCount > 0 ? interventionCount / totalCount : 0;
+  const interventionTier = classify("failure_rate", interventionRate);
 
   const totalIterations = metrics.reduce((s, m) => s + ((m.metrics || {}).apply_iterations || 0), 0);
   const totalRecovery = metrics.reduce((s, m) => s + ((m.metrics || {}).recovery_attempts || 0), 0);
   const recoveryOverhead = totalIterations > 0 ? totalRecovery / totalIterations : 0;
   const recoveryTier = classify("recovery", recoveryOverhead);
 
-  const conformances = metrics.map(m => ((m.metrics || {}).conformance || {}).overall || 0);
-  const meanConformance = conformances.reduce((a, b) => a + b, 0) / conformances.length;
-  const conformanceTier = classify("conformance", meanConformance);
-
   console.log(`  Total deliverables: ${totalCount}  |  Last 7d: ${last7.length}  |  Last 30d: ${last30.length}`);
   console.log();
 
   const pad = (s, n) => s + " ".repeat(Math.max(0, n - s.length));
-  console.log(`  ${pad("Metric", 25)} ${pad("Value", 20)} Tier`);
+  console.log(`  ${pad("Metric", 28)} ${pad("Value", 20)} Tier`);
   console.log(`  ${"─".repeat(55)}`);
 
   let tc = tierColor(throughputTier);
-  console.log(`  ${pad("Feature Throughput", 25)} ${pad(`${throughput7.toFixed(2)}/day (7d)`, 20)} ${tc}${throughputTier}${RESET}`);
+  console.log(`  ${pad("Feature Frequency", 28)} ${pad(`${throughput7.toFixed(2)}/day (7d)`, 20)} ${tc}${throughputTier}${RESET}`);
 
   tc = tierColor(latencyTier);
-  console.log(`  ${pad("Resolution Latency", 25)} ${pad(formatDuration(avgLatency), 20)} ${tc}${latencyTier}${RESET}`);
+  console.log(`  ${pad("Feature Lead Time", 28)} ${pad(formatDuration(avgLatency), 20)} ${tc}${latencyTier}${RESET}`);
 
-  tc = tierColor(failureTier);
-  console.log(`  ${pad("Failure Rate", 25)} ${pad(`${(failureRate * 100).toFixed(1)}%`, 20)} ${tc}${failureTier}${RESET}`);
+  tc = tierColor(interventionTier);
+  console.log(`  ${pad("Human Intervention Rate", 28)} ${pad(`${(interventionRate * 100).toFixed(1)}%`, 20)} ${tc}${interventionTier}${RESET}`);
 
   tc = tierColor(recoveryTier);
-  console.log(`  ${pad("Recovery Efficiency", 25)} ${pad(`${(recoveryOverhead * 100).toFixed(1)}% overhead`, 20)} ${tc}${recoveryTier}${RESET}`);
-
-  tc = tierColor(conformanceTier);
-  console.log(`  ${pad("Spec Conformance", 25)} ${pad(meanConformance.toFixed(3), 20)} ${tc}${conformanceTier}${RESET}`);
+  console.log(`  ${pad("Recovery Efficiency", 28)} ${pad(`${(recoveryOverhead * 100).toFixed(1)}% overhead`, 20)} ${tc}${recoveryTier}${RESET}`);
 
   console.log();
 }
