@@ -202,16 +202,11 @@ checkField(metricsFile, "metrics.tasks_completed", "2", "Metrics tasks_completed
 
 try {
   const m = loadJSON(metricsFile);
-  const c = m.metrics.conformance;
-  let allOk = true;
-  if (c.functional < 0 || c.functional > 1) allOk = false;
-  if (c.correctness < 0 || c.correctness > 1) allOk = false;
-  if (c.constraints < 0 || c.constraints > 1) allOk = false;
-  if (c.overall < 0 || c.overall > 1) allOk = false;
-  if (Math.abs(c.functional - 2 / 3) > 0.01) allOk = false;
-  if (c.correctness !== 1.0) allOk = false;
-  allOk ? ok("Conformance scores are valid") : no("Conformance scores invalid");
-} catch { no("Conformance check error"); }
+  const humanInterventions = m.metrics.human_interventions;
+  typeof humanInterventions === "number" && humanInterventions >= 0
+    ? ok("human_interventions field is valid")
+    : no("human_interventions field invalid");
+} catch { no("human_interventions check error"); }
 
 // ── Test 10: aura-view.mjs ─────────────────────────────────────────────────
 

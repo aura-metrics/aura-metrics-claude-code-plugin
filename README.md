@@ -8,11 +8,10 @@ Passive metrics collection for AI agent performance using [Claude Code hooks](ht
 
 | Metric | What it measures | Elite | High | Medium | Low |
 |---|---|---|---|---|---|
-| **Feature Throughput** | Deliverables completed per time period | ≥3/day | ≥1/day | ≥1/week | <1/week |
-| **Resolution Latency** | Time from start to deliverable accepted | <1hr | <4hr | <1day | ≥1day |
-| **Deliverable Failure Rate** | % of deliverables failing conformance | <5% | <10% | <15% | ≥15% |
+| **Feature Frequency** | Deliverables completed per time period | ≥3/day | ≥1/day | ≥1/week | <1/week |
+| **Feature Lead Time** | Time from start to deliverable accepted | <1hr | <4hr | <1day | ≥1day |
+| **Human Intervention Rate** | % requiring human takeover or abandoned | <5% | <10% | <15% | ≥15% |
 | **Recovery Efficiency** | Overhead spent on retries/rework | <5% | <10% | <20% | ≥20% |
-| **Spec Conformance** | Quality score 0–1 of accepted deliverables | ≥0.95 | ≥0.85 | ≥0.70 | <0.70 |
 
 ## Prerequisites
 
@@ -130,21 +129,6 @@ Commands from different layers can be mixed freely. For example, start with `/sp
 
 All hooks output `{"suppressOutput": true}` so they're invisible to the user.
 
-### Conformance scoring
-
-When a deliverable is completed (`/aura:done` or `/opsx:archive`), AURA computes a conformance score:
-
-```
-overall = 0.4 × functional + 0.3 × correctness + 0.2 × constraints + 0.1 × iteration_penalty
-```
-
-- **functional** — Task completion ratio from `tasks.md` (checked boxes / total boxes)
-- **correctness** — 1.0 if verify phase was completed, 0.8 otherwise
-- **constraints** — Penalized by 0.1 per recovery attempt
-- **iteration_penalty** — Penalized by 0.15 per extra apply iteration beyond the first
-
-A deliverable is marked as **failed** if `overall < 0.5`.
-
 ## Example Workflows
 
 ### Standalone (no spec framework)
@@ -190,7 +174,7 @@ You:    /aura:done
 node .claude/hooks/aura-view.mjs
 ```
 
-Displays active deliverables with phase progress bars, recent completions with conformance scores, and aggregated stats with Elite/High/Medium/Low tier ratings.
+Displays active deliverables with phase progress bars, recent completions with lead time and intervention counts, and aggregated stats with Elite/High/Medium/Low tier ratings.
 
 ### JSON output
 
@@ -249,7 +233,7 @@ All state is stored under `~/.aura/`:
     my-feature.json      # Phase timestamps, tool counts, spec data
     other-feature.json
   metrics/               # Final metrics (emitted on completion)
-    my-feature.json      # Resolution latency, conformance, tool stats
+    my-feature.json      # Lead time, human interventions, tool stats
 ```
 
 Metrics files are written atomically (write to temp, then rename) to prevent corruption.
@@ -288,13 +272,8 @@ Metrics files are written atomically (write to temp, then rename) to prevent cor
     "recovery_attempts": 0,
     "tasks_completed": 3,
     "tasks_total": 5,
-    "conformance": {
-      "functional": 0.6,
-      "correctness": 1.0,
-      "constraints": 1.0,
-      "overall": 0.84
-    },
-    "deliverable_failed": false
+    "deliverable_failed": false,
+    "human_interventions": 0
   }
 }
 ```
